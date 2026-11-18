@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Piramida Zdrowego Żywienia i Aktywności Fizycznej</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Fredoka dla nagłówków -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Fredoka', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            green: '#10b981',
+                            dark: '#064e3b',
+                            light: '#ecfdf5',
+                            orange: '#f59e0b',
+                            blue: '#3b82f6'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #f8fafc;
+            color: #1e293b;
+            overflow-x: hidden;
+        }
+
+        /* Niestandardowe kształty i animacje dla Piramidy */
+        .pyramid-tier {
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            cursor: pointer;
+            position: relative;
+        }
+        .pyramid-tier:hover {
+            transform: scale(1.03) translateY(-2px);
+            z-index: 20;
+            filter: brightness(1.05);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+        }
+        .pyramid-tier.active {
+            transform: scale(1.04);
+            z-index: 30;
+            ring: 4px;
+            box-shadow: 0 15px 30px -5px rgba(16, 185, 129, 0.35);
+        }
+
+        /* Animacja talerza */
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .food-pop {
+            animation: popIn 0.3s ease-out forwards;
+        }
+
+        /* Stylowanie Canvas dla Labiryntu */
+        #mazeCanvas {
+            touch-action: none;
+            border-radius: 1rem;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.06);
+        }
+
+        /* Przyciski gry */
+        .game-btn {
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .game-btn:active {
+            transform: translateY(3px);
+        }
+
+        /* Płynne przejścia zakładek */
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.35s ease-out;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Górny pasek nawigacji i gamifikacji -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+            <!-- Logo i tytuł -->
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl shadow-md text-white">
+                    🥗
+                </div>
+                <div>
+                    <h1 class="font-display font-bold text-lg sm:text-xl text-slate-800 leading-tight">
+                        Piramida Zdrowia
+                    </h1>
+                    <p class="text-xs text-slate-500 hidden sm:block">Interaktywny przewodnik po zdrowym stylu życia</p>
+                </div>
+            </div>
+
+            <!-- Panel punktów i odznak -->
+            <div class="flex items-center gap-3 sm:gap-4 bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-200/80">
+                <div class="flex items-center gap-1.5" title="Zdobyte punkty wiedzy">
+                    <span class="text-lg">⭐</span>
+                    <div>
+                        <span class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block leading-none">Punkty</span>
+                        <span id="globalScore" class="font-display font-bold text-emerald-600 text-base leading-none">0</span>
+                    </div>
+                </div>
+                <div class="h-6 w-px bg-slate-200"></div>
+                <div class="flex items-center gap-1.5" title="Ukończone aktywności">
+                    <span class="text-lg">🏆</span>
+                    <div>
+                        <span class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block leading-none">Ranga</span>
+                        <span id="globalRank" class="font-semibold text-slate-700 text-xs sm:text-sm leading-none">Odkrywca</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nawigacja zakładek -->
+        <nav class="bg-slate-50/80 border-t border-slate-200/60">
+            <div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+                <div class="grid grid-cols-4 gap-1 sm:gap-2 py-2" role="tablist">
+                    <button onclick="switchTab('pyramid')" id="tab-pyramid" class="nav-btn active flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-emerald-600 text-white shadow-sm">
+                        <span class="text-base sm:text-lg">🔺</span>
+                        <span class="truncate">Piramida</span>
+                    </button>
+                    <button onclick="switchTab('plate')" id="tab-plate" class="nav-btn flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all text-slate-600 hover:bg-white hover:text-emerald-600">
+                        <span class="text-base sm:text-lg">🍽️</span>
+                        <span class="truncate">Kreator Talerza</span>
+                    </button>
+                    <button onclick="switchTab('maze')" id="tab-maze" class="nav-btn flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all text-slate-600 hover:bg-white hover:text-emerald-600">
+                        <span class="text-base sm:text-lg">🏃</span>
+                        <span class="truncate">Labirynt Zdrowia</span>
+                    </button>
+                    <button onclick="switchTab('quiz')" id="tab-quiz" class="nav-btn flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all text-slate-600 hover:bg-white hover:text-emerald-600">
+                        <span class="text-base sm:text-lg">🧠</span>
+                        <span class="truncate">Quiz Wiedzy</span>
+                    </button>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Powiadomienie Toast (zamiast alert) -->
+    <div id="toastNotification" class="fixed bottom-5 right-5 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-slate-700 max-w-sm">
+            <span id="toastIcon" class="text-2xl">✨</span>
+            <div>
+                <h4 id="toastTitle" class="font-bold text-sm text-emerald-400">Świetnie!</h4>
+                <p id="toastMessage" class="text-xs text-slate-200 mt-0.5">Zdobyto nowe punkty.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Główny kontener aplikacji -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+        <!-- =====================================================================
+             MODUŁ 1: INTERAKTYWNA PIRAMIDA ZDROWEGO ŻYWIENIA
+        ====================================================================== -->
+        <section id="section-pyramid" class="tab-content active">
+            <div class="text-center max-w-2xl mx-auto mb-8">
+                <span class="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-2">
+                    Podstawa zdrowego stylu życia
+                </span>
+                <h2 class="font-display text-2xl sm:text-3xl font-bold text-slate-800">
+                    Interaktywna Piramida Zdrowia
+                </h2>
+                <p class="text-slate-600 text-sm sm:text-base mt-2">
+                    Kliknij wybrane piętro piramidy (od samej podstawy aż po szczyt), aby poznać zalecane porcje, składniki odżywcze i praktyczne wskazówki.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                <!-- Wizualizacja Piramidy (Lewa kolumna) -->
+                <div class="lg:col-span-7 bg-white p-5 sm:p-8 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col items-center">
+                    
+                    <!-- Ostrzeżenie o słodyczach i soli (Obok szczytu) -->
+                    <div class="w-full flex justify-end mb-3">
+                        <button onclick="selectPyramidTier(6)" class="flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2 rounded-2xl text-xs font-semibold transition-all shadow-sm">
+                            <span class="text-base">🚫🍬🧂</span>
+                            <span>Ogranicz cukier, sól i fast-foody!</span>
+                        </button>
+                    </div>
+
+                    <!-- 6 Pięter Piramidy (od góry do dołu wizualnie, numerowane od podstawy 1 do 6) -->
+                    <div class="w-full max-w-xl flex flex-col items-center gap-2 sm:gap-2.5 my-2">
+                        
+                        <!-- Piętro 6 (Szczyt): Zdrowe tłuszcze i orzechy -->
+                        <div onclick="selectPyramidTier(5)" id="tier-5" class="pyramid-tier w-[36%] sm:w-[32%] bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 rounded-t-3xl rounded-b-xl py-3 px-2 text-center shadow-sm border-2 border-amber-300">
+                            <div class="text-xl sm:text-2xl mb-0.5">🫒🥜🥑</div>
+                            <div class="font-display font-bold text-xs sm:text-sm leading-tight">6. Zdrowe tłuszcze</div>
+                            <div class="text-[10px] opacity-85 hidden sm:block">Oleje, orzechy, pestki</div>
+                        </div>
+
+                        <!-- Piętro 5: Białko (Ryby, strączki, jaja, chude mięso) -->
+                        <div onclick="selectPyramidTier(4)" id="tier-4" class="pyramid-tier w-[50%] sm:w-[46%] bg-gradient-to-r from-rose-400 to-red-500 text-white rounded-xl py-3 px-3 text-center shadow-sm border-2 border-rose-300">
+                            <div class="text-xl sm:text-2xl mb-0.5">🐟🥚🫘🍗</div>
+                            <div class="font-display font-bold text-xs sm:text-sm leading-tight">5. Dobre źródła białka</div>
+                            <div class="text-[10px] sm:text-xs opacity-90">Ryby, strączki, jaja, drób</div>
+                        </div>
+
+                        <!-- Piętro 4: Nabiał i produkty mleczne -->
+                        <div onclick="selectPyramidTier(3)" id="tier-3" class="pyramid-tier w-[64%] sm:w-[60%] bg-gradient-to-r from-sky-400 to-blue-500 text-white rounded-xl py-3 px-3 text-center shadow-sm border-2 border-sky-300">
+                            <div class="text-xl sm:text-2xl mb-0.5">🥛🧀🍶</div>
+                            <div class="font-display font-bold text-xs sm:text-sm leading-tight">4. Nabiał i produkty mleczne</div>
+                            <div class="text-[10px] sm:text-xs opacity-90">Jogurt naturalny, kefir, twaróg</div>
+                        </div>
+
+                        <!-- Piętro 3: Produkty zbożowe pełnoziarniste -->
+                        <div onclick="selectPyramidTier(2)" id="tier-2" class="pyramid-tier w-[77%] sm:w-[74%] bg-gradient-to-r from-orange-400 to-amber-600 text-white rounded-xl py-3.5 px-4 text-center shadow-sm border-2 border-orange-300">
+                            <div class="text-xl sm:text-2xl mb-0.5">🍞🌾🥣🍝</div>
+                            <div class="font-display font-bold text-sm sm:text-base leading-tight">3. Produkty zbożowe pełnoziarniste</div>
+                            <div class="text-[11px] sm:text-xs opacity-90">Kasze, ciemne pieczywo, płatki owsiane</div>
+                        </div>
+
+                        <!-- Piętro 2: Warzywa i owoce -->
+                        <div onclick="selectPyramidTier(1)" id="tier-1" class="pyramid-tier w-[90%] sm:w-[88%] bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl py-4 px-4 text-center shadow-sm border-2 border-emerald-400">
+                            <div class="text-2xl sm:text-3xl mb-0.5">🥦🥕🍎🍅🍓</div>
+                            <div class="font-display font-bold text-sm sm:text-base leading-tight">2. Warzywa i owoce (Min. 400g dziennie!)</div>
+                            <div class="text-xs opacity-95">Proporcja: 3/4 warzywa, 1/4 owoce</div>
+                        </div>
+
+                        <!-- Piętro 1 (Podstawa): Aktywność fizyczna i woda -->
+                        <div onclick="selectPyramidTier(0)" id="tier-0" class="pyramid-tier active w-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white rounded-2xl py-4 px-4 text-center shadow-md border-2 border-teal-300">
+                            <div class="text-2xl sm:text-3xl mb-0.5">🏃‍♂️🚴‍♀️💧😴</div>
+                            <div class="font-display font-bold text-base sm:text-lg leading-tight">1. PODSTAWA: Aktywność fizyczna i woda</div>
+                            <div class="text-xs opacity-95">Min. 30-45 min ruchu dziennie + 1.5-2 litry wody</div>
+                        </div>
+
+                    </div>
+
+                    <div class="mt-4 flex items-center gap-2 text-xs text-slate-400">
+                        <span>💡 Wskazówka: Im niżej w piramidzie, tym częściej i więcej danego produktu powinno znaleźć się w Twoim dniu.</span>
+                    </div>
+                </div>
+
+                <!-- Panel szczegółów wybranego piętra (Prawa kolumna) -->
+                <div class="lg:col-span-5 bg-white rounded-3xl shadow-sm border border-slate-200/80 overflow-hidden sticky top-28">
+                    <div id="tierHeaderBg" class="bg-gradient-to-r from-teal-600 to-cyan-600 p-6 text-white transition-colors duration-300">
+                        <div class="flex items-center justify-between">
+                            <span id="tierBadge" class="px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm text-xs font-bold uppercase tracking-wider">
+                                Poziom 1 • Fundament
+                            </span>
+                            <span id="tierEmoji" class="text-4xl">🏃‍♂️💧</span>
+                        </div>
+                        <h3 id="tierTitle" class="font-display text-2xl font-bold mt-3">
+                            Aktywność fizyczna i nawodnienie
+                        </h3>
+                        <p id="tierSubtitle" class="text-white/90 text-sm mt-1">
+                            Absolutna podstawa piramidy zdrowia IŻŻ
+                        </p>
+                    </div>
+
+                    <div class="p-6 space-y-5">
+                        <!-- Zalecana dzienna dawka -->
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Zalecana dzienna ilość</div>
+                            <p id="tierPortion" class="font-semibold text-slate-800 text-sm sm:text-base">
+                                Minimum 30–45 minut umiarkowanej aktywności fizycznej dziennie oraz 1,5–2 litry czystej wody.
+                            </p>
+                        </div>
+
+                        <!-- Opis i znaczenie -->
+                        <div>
+                            <h4 class="font-bold text-slate-800 text-sm mb-1.5 flex items-center gap-1.5">
+                                <span>📌</span> Dlaczego to jest ważne?
+                            </h4>
+                            <p id="tierDesc" class="text-slate-600 text-sm leading-relaxed">
+                                Regularny ruch poprawia wydolność serca, wzmacnia mięśnie i kości, redukuje stres oraz ułatwia utrzymanie prawidłowej masy ciała. Woda jest niezbędna do wszystkich procesów metabolicznych w organizmie.
+                            </p>
+                        </div>
+
+                        <!-- Kluczowe składniki / Przykłady -->
+                        <div>
+                            <h4 class="font-bold text-slate-800 text-sm mb-2 flex items-center gap-1.5">
+                                <span>✨</span> Najlepsze wybory i składniki
+                            </h4>
+                            <div id="tierExamples" class="flex flex-wrap gap-2">
+                                <!-- Wypełniane dynamicznie przez JS -->
+                            </div>
+                        </div>
+
+                        <!-- Praktyczna porada -->
+                        <div class="bg-emerald-50/80 border border-emerald-200/80 p-4 rounded-2xl flex items-start gap-3">
+                            <span class="text-xl mt-0.5">💡</span>
+                            <div>
+                                <div class="font-bold text-emerald-900 text-xs uppercase tracking-wider">Praktyczny nawyk</div>
+                                <p id="tierTip" class="text-emerald-800 text-xs sm:text-sm mt-0.5">
+                                    Wysiądź jeden przystanek wcześniej, wybierz schody zamiast windy i miej zawsze przy sobie butelkę wody!
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Pasek postępu odkrytych pięter -->
+                        <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                            <span>Odkryte poziomy piramidy:</span>
+                            <span id="discoveredCount" class="font-bold text-emerald-600">1 / 7 (+10 pkt za każdy)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =====================================================================
+             MODUŁ 2: KREATOR ZDROWEGO TALERZA (SYMULATOR POSIŁKU)
+        ====================================================================== -->
+        <section id="section-plate" class="tab-content">
+            <div class="text-center max-w-2xl mx-auto mb-6">
+                <span class="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider mb-2">
+                    Symulator zbilansowanego posiłku
+                </span>
+                <h2 class="font-display text-2xl sm:text-3xl font-bold text-slate-800">
+                    Kreator Zdrowego Talerza
+                </h2>
+                <p class="text-slate-600 text-sm sm:text-base mt-1">
+                    Skomponuj idealny posiłek! Zgodnie z zasadą Talerza Zdrowego Żywienia: <strong>½ talerza</strong> powinny stanowić warzywa i owoce, <strong>¼</strong> produkty pełnoziarniste, a <strong>¼</strong> zdrowe źródła białka.
+                </p>
+            </div>
+
+            <!-- Wybór rodzaju posiłku -->
+            <div class="flex justify-center gap-2 sm:gap-3 mb-6">
+                <button onclick="setMealType('Śniadanie')" class="meal-type-btn active px-4 py-2 rounded-xl font-semibold text-sm bg-slate-800 text-white shadow-sm transition-all">
+                    🌅 Śniadanie
+                </button>
+                <button onclick="setMealType('Obiad')" class="meal-type-btn px-4 py-2 rounded-xl font-semibold text-sm bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">
+                    ☀️ Obiad
+                </button>
+                <button onclick="setMealType('Kolacja')" class="meal-type-btn px-4 py-2 rounded-xl font-semibold text-sm bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">
+                    🌙 Kolacja
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                <!-- Lewa strona: Spiżarnia produktów (Kategorie) -->
+                <div class="lg:col-span-5 bg-white p-5 rounded-3xl shadow-sm border border-slate-200/80">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-display font-bold text-lg text-slate-800">Wybierz składniki</h3>
+                        <span class="text-xs text-slate-400">Kliknij, aby dodać na talerz</span>
+                    </div>
+
+                    <!-- Filtry kategorii -->
+                    <div class="flex flex-wrap gap-1.5 mb-4" id="foodCategoryFilters">
+                        <button onclick="filterFoods('all')" class="food-filter-btn active px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white">Wszystkie</button>
+                        <button onclick="filterFoods('veg')" class="food-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200">🥦 Warzywa/Owoce</button>
+                        <button onclick="filterFoods('grain')" class="food-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200">🌾 Zboża</button>
+                        <button onclick="filterFoods('protein')" class="food-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200">🐟 Białko/Nabiał</button>
+                        <button onclick="filterFoods('fat')" class="food-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200">🫒 Tłuszcze/Woda</button>
+                        <button onclick="filterFoods('junk')" class="food-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200">🍩 Przekąski</button>
+                    </div>
+
+                    <!-- Siatka produktów do kliknięcia -->
+                    <div id="foodCatalogGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[420px] overflow-y-auto pr-1">
+                        <!-- Generowane przez JS -->
+                    </div>
+                </div>
+
+                <!-- Środek: Wirtualny Talerz -->
+                <div class="lg:col-span-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80 flex flex-col items-center">
+                    <div class="w-full flex items-center justify-between mb-3">
+                        <span id="currentMealLabel" class="font-display font-bold text-slate-700">Twój talerz: Śniadanie</span>
+                        <button onclick="clearPlate()" class="text-xs font-semibold text-rose-500 hover:text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg transition-colors">
+                            🗑️ Wyczyść
+                        </button>
+                    </div>
+
+                    <!-- Grafika Talerza z podziałem na strefy -->
+                    <div class="relative w-64 h-64 sm:w-72 sm:h-72 rounded-full bg-slate-50 border-8 border-slate-200 shadow-inner flex items-center justify-center my-2 overflow-hidden">
+                        <!-- Linie pomocnicze Talerza Zdrowia -->
+                        <div class="absolute inset-0 pointer-events-none opacity-30">
+                            <!-- Linia pionowa dzieląca pół na pół -->
+                            <div class="absolute top-0 bottom-0 left-1/2 w-0.5 bg-slate-400 border-dashed"></div>
+                            <!-- Linia pozioma na prawej połowie -->
+                            <div class="absolute top-1/2 right-0 w-1/2 h-0.5 bg-slate-400"></div>
+                            <!-- Etykiety tła -->
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-700 uppercase tracking-wider rotate-[-90deg]">50% Warzywa</span>
+                            <span class="absolute right-4 top-12 text-[9px] font-bold text-amber-700 uppercase">25% Zboża</span>
+                            <span class="absolute right-4 bottom-12 text-[9px] font-bold text-rose-700 uppercase">25% Białko</span>
+                        </div>
+
+                        <!-- Kontener na dodane produkty -->
+                        <div id="plateItemsContainer" class="relative z-10 w-full h-full p-6 flex flex-wrap items-center justify-center content-center gap-1.5">
+                            <div id="emptyPlatePlaceholder" class="text-center text-slate-400 px-4">
+                                <span class="text-3xl block mb-1">🍽️</span>
+                                <span class="text-xs">Talerz jest pusty.<br>Dodaj produkty z listy!</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lista wybranych elementów z możliwością usunięcia -->
+                    <div class="w-full mt-3">
+                        <div class="text-xs font-semibold text-slate-500 mb-1.5">Na talerzu (<span id="plateItemCount">0</span>/10 porcji):</div>
+                        <div id="plateTagsList" class="flex flex-wrap gap-1.5 min-h-[32px]">
+                            <!-- Tagi produktów -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prawa strona: Analiza i Ocena Dietetyczna -->
+                <div class="lg:col-span-3 bg-white p-5 rounded-3xl shadow-sm border border-slate-200/80 space-y-4">
+                    <h3 class="font-display font-bold text-lg text-slate-800">Analiza posiłku</h3>
+
+                    <!-- Wskaźnik oceny -->
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Ocena zbilansowania</div>
+                        <div id="plateScoreValue" class="font-display text-4xl font-bold text-slate-300 my-1">0%</div>
+                        <div id="plateRatingBadge" class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-600">
+                            Brak składników
+                        </div>
+                    </div>
+
+                    <!-- Paski proporcji grup produktów -->
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs font-semibold mb-1">
+                                <span class="text-emerald-700">🥦 Warzywa i owoce (cel ~50%)</span>
+                                <span id="stat-veg">0%</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div id="bar-veg" class="h-full bg-emerald-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-xs font-semibold mb-1">
+                                <span class="text-amber-700">🌾 Pełne ziarna (cel ~25%)</span>
+                                <span id="stat-grain">0%</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div id="bar-grain" class="h-full bg-amber-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-xs font-semibold mb-1">
+                                <span class="text-rose-700">🐟 Zdrowe białko (cel ~25%)</span>
+                                <span id="stat-protein">0%</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div id="bar-protein" class="h-full bg-rose-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Porady w czasie rzeczywistym -->
+                    <div class="bg-blue-50/70 border border-blue-100 p-3.5 rounded-2xl">
+                        <div class="font-bold text-blue-900 text-xs mb-1 flex items-center gap-1">
+                            <span>🩺</span> Wskazówka dietetyka:
+                        </div>
+                        <p id="plateFeedbackText" class="text-xs text-blue-800 leading-relaxed">
+                            Zacznij od nałożenia dużej porcji kolorowych warzyw na połowę talerza!
+                        </p>
+                    </div>
+
+                    <button onclick="claimPlateReward()" id="claimPlateBtn" disabled class="w-full py-3 px-4 rounded-xl font-bold text-sm bg-slate-200 text-slate-400 cursor-not-allowed transition-all shadow-sm">
+                        Zatwierdź posiłek (min. 80%)
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- =====================================================================
+             MODUŁ 3: LABIRYNT ZDROWIA (MINI-GRA HTML5 CANVAS)
+        ====================================================================== -->
+        <section id="section-maze" class="tab-content">
+            <div class="text-center max-w-2xl mx-auto mb-5">
+                <span class="inline-block px-3 py-1 rounded-full bg-teal-100 text-teal-800 text-xs font-bold uppercase tracking-wider mb-2">
+                    Gra zręcznościowa
+                </span>
+                <h2 class="font-display text-2xl sm:text-3xl font-bold text-slate-800">
+                    Labirynt Zdrowych Nawyków
+                </h2>
+                <p class="text-slate-600 text-sm mt-1">
+                    Dotrzyj do mety 🏁 zbierając po drodze zdrowe produkty z podstawy piramidy (💧🥦🍎🐟) i omijając pułapki fast-food (🍩🥤🍟)!
+                </p>
+            </div>
+
+            <div class="max-w-4xl mx-auto bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-slate-200/80">
+                <!-- Pasek statystyk gry -->
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/60">
+                    <div class="flex items-center gap-4 sm:gap-6">
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-slate-400 block">Poziom</span>
+                            <span id="mazeLevelDisplay" class="font-display font-bold text-lg text-slate-800">1 / 3</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-slate-400 block">Zdrowe skarby</span>
+                            <span id="mazeItemsDisplay" class="font-display font-bold text-lg text-emerald-600">0 / 5</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-slate-400 block">Wynik rundy</span>
+                            <span id="mazeScoreDisplay" class="font-display font-bold text-lg text-amber-500">100</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <span id="mazeStatusBadge" class="hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            Gotowy do biegu!
+                        </span>
+                        <button onclick="resetMazeLevel()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-colors shadow-sm">
+                            🔄 Restart
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Kontener Canvas -->
+                <div class="relative w-full flex justify-center bg-slate-100 rounded-2xl p-2 sm:p-3 border border-slate-200">
+                    <canvas id="mazeCanvas" class="bg-white max-w-full"></canvas>
+
+                    <!-- Ekran podsumowania poziomu / wygranej (Overlay) -->
+                    <div id="mazeOverlay" class="hidden absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-2xl flex items-center justify-center p-4 z-20">
+                        <div class="bg-white rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl transform scale-100">
+                            <div id="mazeOverlayEmoji" class="text-5xl mb-3">🏆</div>
+                            <h3 id="mazeOverlayTitle" class="font-display text-2xl font-bold text-slate-800">Poziom ukończony!</h3>
+                            <p id="mazeOverlayDesc" class="text-sm text-slate-600 mt-2">
+                                Zebrałeś wszystkie zdrowe produkty i dotarłeś do mety pełen energii!
+                            </p>
+                            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 my-4">
+                                <span class="text-xs text-emerald-700 font-semibold block">Zdobyte punkty:</span>
+                                <span id="mazeOverlayPoints" class="font-display text-2xl font-bold text-emerald-600">+150 pkt</span>
+                            </div>
+                            <button id="mazeNextBtn" onclick="nextMazeLevel()" class="w-full py-3 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md transition-all">
+                                Następny poziom ➡️
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Kontrolki dotykowe i legenda -->
+                <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <!-- Legenda -->
+                    <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/60 text-xs space-y-1.5">
+                        <div class="font-bold text-slate-700">Zasady gry:</div>
+                        <div class="flex flex-wrap gap-3 text-slate-600">
+                            <span>🏃 <strong>Ty</strong> (Strzałki / WASD)</span>
+                            <span>🥦💧🍎 <strong>+25 pkt</strong> (Zdrowie)</span>
+                            <span>🍩🥤 <strong>-20 pkt</strong> (Spowalnia!)</span>
+                            <span>🏁 <strong>Meta</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Przyciski kierunkowe (dla urządzeń mobilnych i myszy) -->
+                    <div class="flex justify-center md:justify-end">
+                        <div class="grid grid-cols-3 gap-2 w-44">
+                            <div></div>
+                            <button onmousedown="movePlayer(0, -1)" ontouchstart="event.preventDefault(); movePlayer(0, -1)" class="game-btn h-12 bg-slate-100 hover:bg-emerald-100 active:bg-emerald-200 border-b-4 border-slate-300 rounded-xl flex items-center justify-center text-xl font-bold text-slate-700 shadow-sm">
+                                ⬆️
+                            </button>
+                            <div></div>
+                            <button onmousedown="movePlayer(-1, 0)" ontouchstart="event.preventDefault(); movePlayer(-1, 0)" class="game-btn h-12 bg-slate-100 hover:bg-emerald-100 active:bg-emerald-200 border-b-4 border-slate-300 rounded-xl flex items-center justify-center text-xl font-bold text-slate-700 shadow-sm">
+                                ⬅️
+                            </button>
+                            <button onmousedown="movePlayer(0, 1)" ontouchstart="event.preventDefault(); movePlayer(0, 1)" class="game-btn h-12 bg-slate-100 hover:bg-emerald-100 active:bg-emerald-200 border-b-4 border-slate-300 rounded-xl flex items-center justify-center text-xl font-bold text-slate-700 shadow-sm">
+                                ⬇️
+                            </button>
+                            <button onmousedown="movePlayer(1, 0)" ontouchstart="event.preventDefault(); movePlayer(1, 0)" class="game-btn h-12 bg-slate-100 hover:bg-emerald-100 active:bg-emerald-200 border-b-4 border-slate-300 rounded-xl flex items-center justify-center text-xl font-bold text-slate-700 shadow-sm">
+                                ➡️
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =====================================================================
+             MODUŁ 4: QUIZ WIEDZY O PIRAMIDZIE ŻYWIENIA
+        ====================================================================== -->
+        <section id="section-quiz" class="tab-content">
+            <div class="max-w-3xl mx-auto">
+                <div class="text-center mb-6">
+                    <span class="inline-block px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-bold uppercase tracking-wider mb-2">
+                        Sprawdź swoją wiedzę
+                    </span>
+                    <h2 class="font-display text-2xl sm:text-3xl font-bold text-slate-800">
+                        Wielki Quiz Zdrowego Żywienia
+                    </h2>
+                    <p class="text-slate-600 text-sm mt-1">
+                        Odpowiedz na 10 pytań dotyczących piramidy żywienia, nawodnienia i zdrowych nawyków.
+                    </p>
+                </div>
+
+                <!-- Kontener Quizu -->
+                <div id="quizContainer" class="bg-white rounded-3xl shadow-sm border border-slate-200/80 overflow-hidden">
+                    <!-- Pasek postępu quizu -->
+                    <div class="bg-slate-50 px-6 py-4 border-b border-slate-200/80 flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Pytanie</span>
+                            <span id="quizProgressText" class="font-display font-bold text-slate-800">1 / 10</span>
+                        </div>
+
+                        <!-- Pasek wizualny -->
+                        <div class="flex-grow max-w-xs h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div id="quizProgressBar" class="h-full bg-purple-600 transition-all duration-300" style="width: 10%"></div>
+                        </div>
+
+                        <!-- Licznik serii (Streak) -->
+                        <div class="flex items-center gap-1 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
+                            <span class="text-sm">🔥</span>
+                            <span id="quizStreak" class="font-bold text-xs text-amber-700">Seria: 0</span>
+                        </div>
+                    </div>
+
+                    <!-- Treść pytania -->
+                    <div id="quizQuestionArea" class="p-6 sm:p-8">
+                        <div class="flex items-start gap-3 mb-6">
+                            <span id="quizQuestionEmoji" class="text-3xl sm:text-4xl bg-purple-50 p-3 rounded-2xl border border-purple-100">🥗</span>
+                            <h3 id="quizQuestionText" class="font-display text-lg sm:text-xl font-bold text-slate-800 leading-snug pt-1">
+                                Ładowanie pytania...
+                            </h3>
+                        </div>
+
+                        <!-- Opcje odpowiedzi -->
+                        <div id="quizOptionsContainer" class="space-y-3">
+                            <!-- Generowane przez JS -->
+                        </div>
+
+                        <!-- Wyjaśnienie po odpowiedzi -->
+                        <div id="quizExplanationBox" class="hidden mt-6 p-4 rounded-2xl border">
+                            <div class="flex items-start gap-3">
+                                <span id="quizExpIcon" class="text-2xl">💡</span>
+                                <div>
+                                    <h4 id="quizExpTitle" class="font-bold text-sm">Wyjaśnienie</h4>
+                                    <p id="quizExpText" class="text-xs sm:text-sm mt-1 leading-relaxed"></p>
+                                </div>
+                            </div>
+                            <div class="mt-4 flex justify-end">
+                                <button onclick="nextQuizQuestion()" id="quizNextBtn" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition-all shadow-sm">
+                                    Następne pytanie ➡️
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ekran końcowy Quizu -->
+                    <div id="quizResultArea" class="hidden p-8 text-center">
+                        <div id="quizFinalEmoji" class="text-6xl mb-4">🎓</div>
+                        <span class="inline-block px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-bold uppercase tracking-wider mb-2">
+                            Podsumowanie Quizu
+                        </span>
+                        <h3 id="quizFinalTitle" class="font-display text-2xl sm:text-3xl font-bold text-slate-800">
+                            Ekspert Zdrowego Żywienia!
+                        </h3>
+                        <p id="quizFinalDesc" class="text-slate-600 text-sm max-w-md mx-auto mt-2">
+                            Świetna robota! Twoja wiedza na temat piramidy żywienia jest imponująca.
+                        </p>
+
+                        <div class="grid grid-cols-2 gap-4 max-w-sm mx-auto my-6">
+                            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                                <span class="text-xs text-slate-400 font-bold uppercase block">Poprawne</span>
+                                <span id="quizFinalScore" class="font-display text-2xl font-bold text-emerald-600">8 / 10</span>
+                            </div>
+                            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                                <span class="text-xs text-slate-400 font-bold uppercase block">Bonus punktowy</span>
+                                <span id="quizFinalBonus" class="font-display text-2xl font-bold text-purple-600">+160 pkt</span>
+                            </div>
+                        </div>
+
+                        <button onclick="restartQuiz()" class="px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-md transition-all">
+                            🔄 Rozwiąż quiz ponownie
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Stopka -->
+    <footer class="bg-white border-t border-slate-200 mt-12 py-6">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-2">
+                <span class="text-base">🥗</span>
+                <span>Edukacyjna aplikacja o Piramidzie Zdrowego Żywienia i Aktywności Fizycznej.</span>
+            </div>
+            <div>
+                Pamiętaj o codziennej dawce ruchu i piciu wody! 💧🏃‍♂️
+            </div>
+        </div>
+    </footer>
+
+    <!-- =========================================================================
+         LOGIKA JAVASCRIPT APLIKACJI
+    ========================================================================== -->
+    <script>
+        // ==========================================
+        // 0. STAN GLOBALNY I GAMIFIKACJA
+        // ==========================================
+        let globalPoints = 0;
+        const discoveredTiers = new Set([0]); // Pierwsze piętro odkryte na start
+
+        function addGlobalPoints(pts, title, msg, icon = '⭐') {
+            globalPoints += pts;
+            document.getElementById('globalScore').textContent = globalPoints;
+            updateGlobalRank();
+            showToast(title, `${msg} (+${pts} pkt)`, icon);
+        }
+
+        function updateGlobalRank() {
+            const rankEl = document.getElementById('globalRank');
+            if (globalPoints >= 600) rankEl.textContent = 'Mistrz Zdrowia 👑';
+            else if (globalPoints >= 350) rankEl.textContent = 'Ekspert Żywienia 🎓';
+            else if (globalPoints >= 150) rankEl.textContent = 'Świadomy Smakosz 🥑';
+            else rankEl.textContent = 'Odkrywca 🌱';
+        }
+
+        let toastTimeout;
+        function showToast(title, message, icon = '✨') {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastTitle').textContent = title;
+            document.getElementById('toastMessage').textContent = message;
+            document.getElementById('toastIcon').textContent = icon;
+
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-y-24', 'opacity-0');
+            }, 3200);
+        }
+
+        // Nawigacja zakładek
+        function switchTab(tabId) {
+            // Ukryj wszystkie sekcje
+            document.querySelectorAll('.tab-content').forEach(sec => sec.classList.remove('active'));
+            // Resetuj przyciski
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-emerald-600', 'text-white', 'shadow-sm', 'active');
+                btn.classList.add('text-slate-600', 'hover:bg-white', 'hover:text-emerald-600');
+            });
+
+            // Aktywuj wybraną sekcję i przycisk
+            document.getElementById(`section-${tabId}`).classList.add('active');
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            activeBtn.classList.remove('text-slate-600', 'hover:bg-white', 'hover:text-emerald-600');
+            activeBtn.classList.add('bg-emerald-600', 'text-white', 'shadow-sm', 'active');
+
+            // Jeśli przełączono na labirynt, przerysuj canvas aby dopasować rozmiar
+            if (tabId === 'maze') {
+                setTimeout(resizeMazeCanvas, 50);
+            }
+        }
+
+        // ==========================================
+        // 1. DANE I LOGIKA PIRAMIDY ZDROWIA
+        // ==========================================
+        const pyramidData = [
+            {
+                badge: 'Poziom 1 • Fundament',
+                emoji: '🏃‍♂️💧',
+                title: 'Aktywność fizyczna i nawodnienie',
+                subtitle: 'Absolutna podstawa piramidy zdrowia',
+                headerClass: 'from-teal-600 to-cyan-600',
+                portion: 'Minimum 30–45 minut umiarkowanej aktywności fizycznej dziennie oraz 1,5–2 litry czystej wody.',
+                desc: 'Regularny ruch poprawia wydolność serca, wzmacnia mięśnie i kości, redukuje stres oraz ułatwia utrzymanie prawidłowej masy ciała. Woda jest niezbędna do wszystkich procesów metabolicznych, termoregulacji i koncentracji.',
+                examples: ['Spacer i marsz', 'Jazda na rowerze', 'Pływanie', 'Woda niegazowana', 'Herbaty ziołowe bez cukru', '7–8h snu'],
+                tip: 'Wysiądź jeden przystanek wcześniej, wybierz schody zamiast windy i miej zawsze przy sobie butelkę wody!'
+            },
+            {
+                badge: 'Poziom 2 • Najważniejsza grupa',
+                emoji: '🥦🍎',
+                title: 'Warzywa i owoce',
+                subtitle: 'Podstawa codziennego jadłospisu',
+                headerClass: 'from-emerald-500 to-green-600',
+                portion: 'Minimum 400–500 g dziennie (w 4–5 porcjach). Zachowaj proporcję: 3/4 warzywa i 1/4 owoce.',
+                desc: 'Warzywa i owoce to skarbnica witamin (C, E, beta-karoten, kwas foliowy), składników mineralnych (potas, magnez), błonnika pokarmowego oraz silnych antyoksydantów chroniących przed chorobami cywilizacyjnymi.',
+                examples: ['Brokuły i szpinak', 'Pomidory i papryka', 'Marchew i buraki', 'Jabłka i gruszki', 'Owoce jagodowe (borówki, maliny)', 'Kiszonki'],
+                tip: 'Dodawaj porcję warzyw do każdego posiłku – np. pomidora do kanapek, surówkę do obiadu, a na przekąskę chrup marchewkę.'
+            },
+            {
+                badge: 'Poziom 3 • Energia na cały dzień',
+                emoji: '🍞🌾',
+                title: 'Produkty zbożowe pełnoziarniste',
+                subtitle: 'Główne źródło węglowodanów złożonych',
+                headerClass: 'from-orange-500 to-amber-600',
+                portion: '3–5 porcji dziennie, najlepiej w postaci produktów z pełnego przemiału.',
+                desc: 'Produkty pełnoziarniste dostarczają energii uwalnianej stopniowo (bez gwałtownych skoków cukru we krwi), są bogate w błonnik wspierający pracę jelit, witaminy z grupy B, żelazo oraz cynk.',
+                examples: ['Chleb razowy i graham', 'Płatki owsiane górskie', 'Kasza gryczana i pęczak', 'Ryż brązowy', 'Makaron pełnoziarnisty', 'Komosa ryżowa'],
+                tip: 'Zamień białe pieczywo i jasny makaron na ich pełnoziarniste odpowiedniki – szybciej poczujesz sytość!'
+            },
+            {
+                badge: 'Poziom 4 • Mocne kości',
+                emoji: '🥛🧀',
+                title: 'Nabiał i produkty mleczne',
+                subtitle: 'Źródło wapnia i pełnowartościowego białka',
+                headerClass: 'from-sky-500 to-blue-600',
+                portion: '2 duże szklanki mleka dziennie lub zamiennie produkty fermentowane (kefir, jogurt, maślanka, ser biały).',
+                desc: 'Nabiał dostarcza najlepiej przyswajalnego wapnia niezbędnego do budowy kości i zębów, a także witamin B2, B12 i D. Fermentowane napoje mleczne zawierają cenne bakterie probiotyczne wspierające odporność.',
+                examples: ['Jogurt naturalny', 'Kefir i maślanka', 'Twaróg półtłusty', 'Mleko 1,5%–2%', 'Mozzarella', 'Napoje roślinne fortyfikowane wapniem'],
+                tip: 'Wybieraj jogurty naturalne bez dodatku cukru i samodzielnie dodaj do nich świeże owoce lub orzechy.'
+            },
+            {
+                badge: 'Poziom 5 • Budulec organizmu',
+                emoji: '🐟🫘',
+                title: 'Białko: ryby, strączki, jaja, chude mięso',
+                subtitle: 'Wysokiej jakości aminokwasy i kwasy Omega-3',
+                headerClass: 'from-rose-500 to-red-600',
+                portion: 'Ryby min. 2 razy w tygodniu; nasiona roślin strączkowych 2–3 razy w tygodniu; ograniczenie mięsa czerwonego do 500 g tygodniowo.',
+                desc: 'Białko jest podstawowym budulcem tkanek, enzymów i hormonów. Tłuste ryby morskie dostarczają bezcennych kwasów Omega-3, a rośliny strączkowe stanowią doskonałą, bogatą w błonnik alternatywę dla mięsa.',
+                examples: ['Łosoś, makrela, śledź', 'Soczewica, ciecierzyca, fasola', 'Jaja z wolnego wybiegu', 'Chude mięso drobiowe (indyk, kurczak)', 'Tofu i tempeh'],
+                tip: 'Wprowadź przynajmniej jeden bezmięsny dzień w tygodniu – przygotuj np. curry z ciecierzycy lub zupę z czerwonej soczewicy.'
+            },
+            {
+                badge: 'Poziom 6 • Szczyt piramidy',
+                emoji: '🫒🥜',
+                title: 'Zdrowe tłuszcze roślinne i orzechy',
+                subtitle: 'Niewielkie ilości, ogromne korzyści dla mózgu i serca',
+                headerClass: 'from-amber-400 to-yellow-500',
+                portion: 'Niewielki dodatek do posiłków (np. 1–2 łyżki oliwy lub garść niesolonych orzechów dziennie).',
+                desc: 'Nienasycone kwasy tłuszczowe obniżają poziom „złego” cholesterolu LDL, wspierają pracę układu nerwowego i umożliwiają wchłanianie witamin A, D, E i K. Tłuszcze zwierzęce (masło, smalec) należy ograniczać.',
+                examples: ['Oliwa z oliwek extra virgin', 'Olej rzepakowy i lniany', 'Orzechy włoskie i migdały', 'Pestki dyni i słonecznika', 'Awokado', 'Siemię lniane'],
+                tip: 'Skrop sałatkę łyżką oliwy z oliwek – dzięki temu organizm przyswoi witaminy rozpuszczalne w tłuszczach!'
+            },
+            {
+                badge: 'Uwaga • Poza piramidą',
+                emoji: '🚫🍬',
+                title: 'Czego unikać? Cukier, sól i żywność przetworzona',
+                subtitle: 'Produkty szkodliwe przy częstym spożyciu',
+                headerClass: 'from-rose-700 to-slate-800',
+                portion: 'Maksymalnie 5 g soli dziennie (1 płaska łyżeczka ze wszystkich źródeł) oraz ograniczenie cukrów prostych poniżej 10% energii.',
+                desc: 'Nadmiar cukru prowadzi do otyłości, cukrzycy typu 2 i próchnicy. Nadmiar soli podnosi ciśnienie tętnicze i obciąża nerki. Tłuszcze trans obecne w wyrobach cukierniczych i fast-foodach sprzyjają chorobom serca.',
+                examples: ['Słodzone napoje gazowane', 'Słodycze i wyroby cukiernicze', 'Słone przekąski (chipsy, paluszki)', 'Fast-foody i dania instant', 'Zamiast soli: zioła i przyprawy!'],
+                tip: 'Zastąp sól aromatycznymi ziołami (bazylia, oregano, kurkuma, czosnek), a zamiast słodyczy sięgnij po owoce lub gorzką czekoladę (min. 70% kakao).'
+            }
+        ];
+
+        function selectPyramidTier(index) {
+            const data = pyramidData[index];
+            if (!data) return;
+
+            // Aktualizacja aktywnego wyglądu na piramidzie
+            document.querySelectorAll('.pyramid-tier').forEach(el => el.classList.remove('active'));
+            const tierEl = document.getElementById(`tier-${index}`);
+            if (tierEl) tierEl.classList.add('active');
+
+            // Aktualizacja nagłówka karty szczegółów
+            const headerBg = document.getElementById('tierHeaderBg');
+            headerBg.className = `bg-gradient-to-r ${data.headerClass} p-6 text-white transition-colors duration-300`;
+
+            document.getElementById('tierBadge').textContent = data.badge;
+            document.getElementById('tierEmoji').textContent = data.emoji;
+            document.getElementById('tierTitle').textContent = data.title;
+            document.getElementById('tierSubtitle').textContent = data.subtitle;
+            document.getElementById('tierPortion').textContent = data.portion;
+            document.getElementById('tierDesc').textContent = data.desc;
+            document.getElementById('tierTip').textContent = data.tip;
+
+            // Renderowanie przykładów
+            const examplesContainer = document.getElementById('tierExamples');
+            examplesContainer.innerHTML = data.examples.map(ex => 
+                `<span class="px-3 py-1 rounded-xl bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/70">${ex}</span>`
+            ).join('');
+
+            // Gamifikacja za odkrywanie pięter
+            if (!discoveredTiers.has(index)) {
+                discoveredTiers.add(index);
+                document.getElementById('discoveredCount').textContent = `${discoveredTiers.size} / 7 (+10 pkt za każdy)`;
+                addGlobalPoints(10, 'Odkryto poziom piramidy!', data.title, '🔺');
+            }
+        }
+
+        // ==========================================
+        // 2. KREATOR ZDROWEGO TALERZA (SYMULATOR)
+        // ==========================================
+        const foodDatabase = [
+            // Warzywa i owoce (veg)
+            { id: 'brokuly', name: 'Brokuły', emoji: '🥦', cat: 'veg', healthy: true },
+            { id: 'pomidor', name: 'Pomidory', emoji: '🍅', cat: 'veg', healthy: true },
+            { id: 'marchew', name: 'Marchewka', emoji: '🥕', cat: 'veg', healthy: true },
+            { id: 'salata', name: 'Mix sałat', emoji: '🥬', cat: 'veg', healthy: true },
+            { id: 'papryka', name: 'Papryka', emoji: '🫑', cat: 'veg', healthy: true },
+            { id: 'jablko', name: 'Jabłko', emoji: '🍎', cat: 'veg', healthy: true },
+            { id: 'borowki', name: 'Borówki', emoji: '🫐', cat: 'veg', healthy: true },
+            
+            // Zboża pełnoziarniste (grain)
+            { id: 'chleb', name: 'Chleb razowy', emoji: '🍞', cat: 'grain', healthy: true },
+            { id: 'kasza', name: 'Kasza gryczana', emoji: '🍚', cat: 'grain', healthy: true },
+            { id: 'owsianka', name: 'Płatki owsiane', emoji: '🥣', cat: 'grain', healthy: true },
+            { id: 'makaron', name: 'Makaron razowy', emoji: '🍝', cat: 'grain', healthy: true },
+
+            // Białko i nabiał (protein)
+            { id: 'losos', name: 'Łosoś pieczony', emoji: '🐟', cat: 'protein', healthy: true },
+            { id: 'jajko', name: 'Jajko gotowane', emoji: '🥚', cat: 'protein', healthy: true },
+            { id: 'ciecierzyca', name: 'Ciecierzyca', emoji: '🫘', cat: 'protein', healthy: true },
+            { id: 'kurczak', name: 'Pierś z indyka', emoji: '🍗', cat: 'protein', healthy: true },
+            { id: 'jogurt', name: 'Jogurt naturalny', emoji: '🥛', cat: 'protein', healthy: true },
+            { id: 'twarog', name: 'Twaróg chudy', emoji: '🧀', cat: 'protein', healthy: true },
+
+            // Zdrowe tłuszcze i woda (fat)
+            { id: 'oliwa', name: 'Oliwa z oliwek', emoji: '🫒', cat: 'fat', healthy: true },
+            { id: 'orzechy', name: 'Orzechy włoskie', emoji: '🥜', cat: 'fat', healthy: true },
+            { id: 'awokado', name: 'Awokado', emoji: '🥑', cat: 'fat', healthy: true },
+            { id: 'woda', name: 'Szklanka wody', emoji: '💧', cat: 'fat', healthy: true },
+
+            // Niezdrowe przekąski (junk)
+            { id: 'paczek', name: 'Pączek z lukrem', emoji: '🍩', cat: 'junk', healthy: false },
+            { id: 'cola', name: 'Słodki napój', emoji: '🥤', cat: 'junk', healthy: false },
+            { id: 'frytki', name: 'Frytki smażone', emoji: '🍟', cat: 'junk', healthy: false },
+            { id: 'burger', name: 'Fast-food burger', emoji: '🍔', cat: 'junk', healthy: false }
+        ];
+
+        let plateItems = [];
+        let currentMealType = 'Śniadanie';
+        let currentFoodFilter = 'all';
+        let rewardedMeals = new Set();
+
+        function renderFoodCatalog() {
+            const grid = document.getElementById('foodCatalogGrid');
+            const filtered = currentFoodFilter === 'all' 
+                ? foodDatabase 
+                : foodDatabase.filter(f => f.cat === currentFoodFilter);
+
+            grid.innerHTML = filtered.map(food => {
+                const badgeColor = food.cat === 'junk' ? 'border-rose-200 bg-rose-50/40 hover:bg-rose-50' : 'border-slate-200/80 bg-slate-50/60 hover:bg-emerald-50 hover:border-emerald-300';
+                return `
+                    <button onclick="addToPlate('${food.id}')" class="flex flex-col items-center justify-center p-2.5 rounded-2xl border ${badgeColor} transition-all text-center group active:scale-95">
+                        <span class="text-2xl sm:text-3xl mb-1 group-hover:scale-110 transition-transform">${food.emoji}</span>
+                        <span class="text-xs font-semibold text-slate-700 leading-tight">${food.name}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function filterFoods(cat) {
+            currentFoodFilter = cat;
+            document.querySelectorAll('.food-filter-btn').forEach(btn => {
+                btn.classList.remove('bg-emerald-600', 'text-white', 'active');
+                btn.classList.add('bg-slate-100', 'text-slate-600');
+            });
+            event.target.classList.remove('bg-slate-100', 'text-slate-600');
+            event.target.classList.add('bg-emerald-600', 'text-white', 'active');
+            renderFoodCatalog();
+        }
+
+        function setMealType(type) {
+            currentMealType = type;
+            document.getElementById('currentMealLabel').textContent = `Twój talerz: ${type}`;
+            document.querySelectorAll('.meal-type-btn').forEach(btn => {
+                btn.classList.remove('bg-slate-800', 'text-white', 'active');
+                btn.classList.add('bg-white', 'text-slate-600', 'border', 'border-slate-200');
+            });
+            event.target.classList.remove('bg-white', 'text-slate-600', 'border', 'border-slate-200');
+            event.target.classList.add('bg-slate-800', 'text-white', 'active');
+            updatePlateAnalysis();
+        }
+
+        function addToPlate(foodId) {
+            if (plateItems.length >= 10) {
+                showToast('Talerz jest pełny!', 'Maksymalnie możesz nałożyć 10 porcji.', '🍽️');
+                return;
+            }
+            const food = foodDatabase.find(f => f.id === foodId);
+            if (food) {
+                plateItems.push({ ...food, uid: Date.now() + Math.random() });
+                renderPlate();
+            }
+        }
+
+        function removeFromPlate(uid) {
+            plateItems = plateItems.filter(item => item.uid !== uid);
+            renderPlate();
+        }
+
+        function clearPlate() {
+            plateItems = [];
+            renderPlate();
+        }
+
+        function renderPlate() {
+            const container = document.getElementById('plateItemsContainer');
+            const tagsList = document.getElementById('plateTagsList');
+            document.getElementById('plateItemCount').textContent = plateItems.length;
+
+            if (plateItems.length === 0) {
+                container.innerHTML = `
+                    <div id="emptyPlatePlaceholder" class="text-center text-slate-400 px-4">
+                        <span class="text-3xl block mb-1">🍽️</span>
+                        <span class="text-xs">Talerz jest pusty.<br>Dodaj produkty z listy!</span>
+                    </div>
+                `;
+                tagsList.innerHTML = '<span class="text-xs text-slate-400 italic">Brak wybranych produktów</span>';
+            } else {
+                container.innerHTML = plateItems.map(item => `
+                    <button onclick="removeFromPlate(${item.uid})" title="Kliknij, aby usunąć: ${item.name}" class="food-pop text-3xl sm:text-4xl hover:scale-125 transition-transform cursor-pointer select-none drop-shadow-sm">
+                        ${item.emoji}
+                    </button>
+                `).join('');
+
+                tagsList.innerHTML = plateItems.map(item => `
+                    <span onclick="removeFromPlate(${item.uid})" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 cursor-pointer transition-colors">
+                        <span>${item.emoji}</span>
+                        <span>${item.name}</span>
+                        <span class="text-[10px] opacity-60">✕</span>
+                    </span>
+                `).join('');
+            }
+
+            updatePlateAnalysis();
+        }
+
+        function updatePlateAnalysis() {
+            const total = plateItems.length;
+            const scoreEl = document.getElementById('plateScoreValue');
+            const badgeEl = document.getElementById('plateRatingBadge');
+            const feedbackEl = document.getElementById('plateFeedbackText');
+            const claimBtn = document.getElementById('claimPlateBtn');
+
+            if (total === 0) {
+                scoreEl.textContent = '0%';
+                scoreEl.className = 'font-display text-4xl font-bold text-slate-300 my-1';
+                badgeEl.textContent = 'Brak składników';
+                badgeEl.className = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-600';
+                ['veg', 'grain', 'protein'].forEach(k => {
+                    document.getElementById(`stat-${k}`).textContent = '0%';
+                    document.getElementById(`bar-${k}`).style.width = '0%';
+                });
+                feedbackEl.textContent = 'Zacznij od nałożenia dużej porcji kolorowych warzyw na połowę talerza!';
+                claimBtn.disabled = true;
+                claimBtn.className = 'w-full py-3 px-4 rounded-xl font-bold text-sm bg-slate-200 text-slate-400 cursor-not-allowed transition-all';
+                return;
+            }
+
+            // Zliczanie grup
+            const vegCount = plateItems.filter(i => i.cat === 'veg').length;
+            const grainCount = plateItems.filter(i => i.cat === 'grain').length;
+            const proteinCount = plateItems.filter(i => i.cat === 'protein').length;
+            const fatCount = plateItems.filter(i => i.cat === 'fat').length;
+            const junkCount = plateItems.filter(i => i.cat === 'junk').length;
+
+            // Główne proporcje talerza (bez wody/tłuszczu traktowanego jako dodatek)
+            const mainTotal = Math.max(1, vegCount + grainCount + proteinCount + junkCount);
+            const vegPct = Math.round((vegCount / mainTotal) * 100);
+            const grainPct = Math.round((grainCount / mainTotal) * 100);
+            const proteinPct = Math.round((proteinCount / mainTotal) * 100);
+
+            document.getElementById('stat-veg').textContent = `${vegPct}%`;
+            document.getElementById('bar-veg').style.width = `${Math.min(100, vegPct)}%`;
+
+            document.getElementById('stat-grain').textContent = `${grainPct}%`;
+            document.getElementById('bar-grain').style.width = `${Math.min(100, grainPct)}%`;
+
+            document.getElementById('stat-protein').textContent = `${proteinPct}%`;
+            document.getElementById('bar-protein').style.width = `${Math.min(100, proteinPct)}%`;
+
+            // Obliczanie oceny (0-100%)
+            // Ideał: veg ~50%, grain ~25%, protein ~25%, brak junk, mile widziany fat/woda
+            let score = 100;
+            score -= Math.abs(50 - vegPct) * 0.9;
+            score -= Math.abs(25 - grainPct) * 0.9;
+            score -= Math.abs(25 - proteinPct) * 0.9;
+            score -= junkCount * 25; // Kara za niezdrowe przekąski
+            if (fatCount > 0) score += 8; // Bonus za zdrowe tłuszcze lub wodę
+            if (total < 3) score -= 20; // Za mały posiłek
+
+            score = Math.max(0, Math.min(100, Math.round(score)));
+            scoreEl.textContent = `${score}%`;
+
+            // Kolory i opis oceny
+            if (score >= 80) {
+                scoreEl.className = 'font-display text-4xl font-bold text-emerald-600 my-1';
+                badgeEl.textContent = 'Idealnie zbilansowany! 🌟';
+                badgeEl.className = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800';
+                claimBtn.disabled = false;
+                claimBtn.className = 'w-full py-3 px-4 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer transition-all shadow-md';
+                claimBtn.textContent = `Zatwierdź ${currentMealType} (+50 pkt)`;
+            } else if (score >= 50) {
+                scoreEl.className = 'font-display text-4xl font-bold text-amber-500 my-1';
+                badgeEl.textContent = 'Całkiem nieźle, popraw proporcje';
+                badgeEl.className = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800';
+                claimBtn.disabled = true;
+                claimBtn.className = 'w-full py-3 px-4 rounded-xl font-bold text-sm bg-slate-200 text-slate-400 cursor-not-allowed transition-all';
+                claimBtn.textContent = 'Zatwierdź posiłek (min. 80%)';
+            } else {
+                scoreEl.className = 'font-display text-4xl font-bold text-rose-500 my-1';
+                badgeEl.textContent = 'Wymaga zmian!';
+                badgeEl.className = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800';
+                claimBtn.disabled = true;
+                claimBtn.className = 'w-full py-3 px-4 rounded-xl font-bold text-sm bg-slate-200 text-slate-400 cursor-not-allowed transition-all';
+                claimBtn.textContent = 'Zatwierdź posiłek (min. 80%)';
+            }
+
+            // Dynamiczna wskazówka dietetyczna
+            if (junkCount > 0) {
+                feedbackEl.textContent = 'Uwaga! Na talerzu znalazły się słodycze lub fast-foody. Usuń je i zastąp świeżymi warzywami lub owocami.';
+            } else if (vegPct < 40) {
+                feedbackEl.textContent = 'Za mało warzyw i owoców! Powinny one zajmować aż połowę Twojego talerza. Dodaj brokuły, pomidory lub sałatę.';
+            } else if (grainPct < 15) {
+                feedbackEl.textContent = 'Brakuje źródła energii! Dodaj porcję produktów pełnoziarnistych (np. kaszę gryczaną, chleb razowy lub płatki owsiane).';
+            } else if (proteinPct < 15) {
+                feedbackEl.textContent = 'Dodaj pełnowartościowe białko (np. rybę, jajko, ciecierzycę lub jogurt naturalny), aby posiłek sycił na długo.';
+            } else if (fatCount === 0) {
+                feedbackEl.textContent = 'Świetne proporcje! Możesz jeszcze dodać odrobinę zdrowych tłuszczów (oliwa, orzechy) lub szklankę wody.';
+            } else {
+                feedbackEl.textContent = 'Brawo! Twój talerz idealnie odzwierciedla zasady Piramidy Zdrowego Żywienia!';
+            }
+        }
+
+        function claimPlateReward() {
+            if (rewardedMeals.has(currentMealType)) {
+                showToast('Posiłek już zapisany!', `Skomponowałeś już wzorowe: ${currentMealType}. Wypróbuj inny posiłek!`, '✅');
+                return;
+            }
+            rewardedMeals.add(currentMealType);
+            addGlobalPoints(50, 'Wzorowy Talerz Zdrowia!', `Zbilansowano posiłek: ${currentMealType}`, '🍽️');
+        }
+
+        // ==========================================
+        // 3. LABIRYNT ZDROWIA (HTML5 CANVAS GAME)
+        // ==========================================
+        const mazeLevels = [
+            // Poziom 1 (11x9) - 0: droga, 1: ściana, 2: zdrowe (+), 3: fastfood (-), 9: meta
+            [
+                [1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,2,0,0,0,2,1],
+                [1,0,1,0,1,0,1,1,1,0,1],
+                [1,2,1,0,0,0,3,0,1,0,1],
+                [1,0,1,1,1,1,1,0,1,0,1],
+                [1,0,0,3,0,2,0,0,0,0,1],
+                [1,1,1,0,1,1,1,1,1,0,1],
+                [1,2,0,0,0,0,3,0,0,9,1],
+                [1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            // Poziom 2 (13x11)
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,2,1,0,0,0,3,0,0,2,1],
+                [1,0,1,0,1,0,1,1,1,1,1,0,1],
+                [1,0,1,0,0,0,1,2,0,0,0,0,1],
+                [1,0,1,1,1,3,1,0,1,1,1,0,1],
+                [1,2,0,0,1,0,0,0,1,3,0,0,1],
+                [1,1,1,0,1,0,1,1,1,0,1,1,1],
+                [1,0,0,0,0,2,1,0,0,0,0,2,1],
+                [1,0,1,1,1,1,1,0,1,1,1,0,1],
+                [1,2,0,3,0,0,0,0,3,0,0,9,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            // Poziom 3 (15x11)
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,2,0,0,3,0,1,0,0,2,1],
+                [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
+                [1,2,1,0,0,0,1,0,0,0,0,0,1,0,1],
+                [1,0,1,1,1,3,1,0,1,1,1,1,1,0,1],
+                [1,0,0,0,1,0,0,2,1,3,0,0,0,0,1],
+                [1,1,1,0,1,0,1,1,1,0,1,1,1,3,1],
+                [1,2,0,0,0,0,1,0,0,0,1,2,0,0,1],
+                [1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],
+                [1,0,3,0,0,2,0,0,3,0,0,0,1,9,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ]
+        ];
+
+        const healthyIcons = ['🥦', '💧', '🍎', '🐟', '🥕', '🥑'];
+        const junkIcons = ['🍩', '🥤', '🍟', '🍔'];
+
+        let currentMazeIdx = 0;
+        let mazeGrid = [];
+        let mazeIconsMap = {};
+        let playerPos = { x: 1, y: 1 };
+        let mazeScore = 100;
+        let collectedHealthy = 0;
+        let totalHealthyInLevel = 0;
+        let mazeCompleted = false;
+        let slowPenaltyUntil = 0;
+
+        const canvas = document.getElementById('mazeCanvas');
+        const ctx = canvas.getContext('2d');
+        let cellSize = 40;
+
+        function initMazeLevel(idx) {
+            currentMazeIdx = idx;
+            mazeCompleted = false;
+            document.getElementById('mazeOverlay').classList.add('hidden');
+            
+            // Głęboka kopia siatki poziomu
+            const template = mazeLevels[idx];
+            mazeGrid = template.map(row => [...row]);
+            mazeIconsMap = {};
+            playerPos = { x: 1, y: 1 };
+            mazeScore = 100;
+            collectedHealthy = 0;
+            totalHealthyInLevel = 0;
+
+            // Przypisz losowe emotikony do pól
+            for (let y = 0; y < mazeGrid.length; y++) {
+                for (let x = 0; x < mazeGrid[y].length; x++) {
+                    if (mazeGrid[y][x] === 2) {
+                        totalHealthyInLevel++;
+                        mazeIconsMap[`${x},${y}`] = healthyIcons[(x + y) % healthyIcons.length];
+                    } else if (mazeGrid[y][x] === 3) {
+                        mazeIconsMap[`${x},${y}`] = junkIcons[(x * y + x) % junkIcons.length];
+                    }
+                }
+            }
+
+            updateMazeHUD();
+            resizeMazeCanvas();
+        }
+
+        function resizeMazeCanvas() {
+            if (!mazeGrid.length) return;
+            const cols = mazeGrid[0].length;
+            const rows = mazeGrid.length;
+            const containerWidth = canvas.parentElement.clientWidth - 24;
+            const maxCanvasWidth = Math.min(containerWidth, 680);
+            
+            cellSize = Math.floor(maxCanvasWidth / cols);
+            canvas.width = cellSize * cols;
+            canvas.height = cellSize * rows;
+            drawMaze();
+        }
+
+        function drawMaze() {
+            if (!mazeGrid.length) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const rows = mazeGrid.length;
+            const cols = mazeGrid[0].length;
+
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const val = mazeGrid[y][x];
+                    const px = x * cellSize;
+                    const py = y * cellSize;
+
+                    if (val === 1) {
+                        // Ściana labiryntu (żywopłot / zielony blok)
+                        ctx.fillStyle = '#065f46';
+                        ctx.fillRect(px, py, cellSize, cellSize);
+                        ctx.fillStyle = '#047857';
+                        ctx.fillRect(px + 2, py + 2, cellSize - 4, cellSize - 4);
+                    } else {
+                        // Ścieżka
+                        ctx.fillStyle = (x + y) % 2 === 0 ? '#f8fafc' : '#f1f5f9';
+                        ctx.fillRect(px, py, cellSize, cellSize);
+                    }
+
+                    // Elementy na planszy
+                    ctx.font = `${Math.floor(cellSize * 0.65)}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    if (val === 2 || val === 3) {
+                        const icon = mazeIconsMap[`${x},${y}`] || '🍎';
+                        ctx.fillText(icon, px + cellSize / 2, py + cellSize / 2 + 2);
+                    } else if (val === 9) {
+                        // Meta
+                        ctx.fillStyle = '#fef3c7';
+                        ctx.fillRect(px + 2, py + 2, cellSize - 4, cellSize - 4);
+                        ctx.fillText('🏁', px + cellSize / 2, py + cellSize / 2 + 2);
+                    }
+                }
+            }
+
+            // Rysowanie gracza
+            const playerPx = playerPos.x * cellSize + cellSize / 2;
+            const playerPy = playerPos.y * cellSize + cellSize / 2;
+
+            // Poświata wokół gracza
+            ctx.beginPath();
+            ctx.arc(playerPx, playerPy, cellSize * 0.4, 0, Math.PI * 2);
+            ctx.fillStyle = Date.now() < slowPenaltyUntil ? 'rgba(244, 63, 94, 0.25)' : 'rgba(16, 185, 129, 0.25)';
+            ctx.fill();
+
+            ctx.font = `${Math.floor(cellSize * 0.72)}px Arial`;
+            ctx.fillText('🏃', playerPx, playerPy + 2);
+        }
+
+        function movePlayer(dx, dy) {
+            if (mazeCompleted) return;
+            // Sprawdzenie spowolnienia po zjedzeniu fast-fooda
+            if (Date.now() < slowPenaltyUntil) {
+                return;
+            }
+
+            const newX = playerPos.x + dx;
+            const newY = playerPos.y + dy;
+
+            if (newY < 0 || newY >= mazeGrid.length || newX < 0 || newX >= mazeGrid[0].length) return;
+            const targetCell = mazeGrid[newY][newX];
+
+            if (targetCell === 1) return; // Ściana
+
+            playerPos.x = newX;
+            playerPos.y = newY;
+
+            // Interakcje z przedmiotami
+            if (targetCell === 2) {
+                mazeGrid[newY][newX] = 0;
+                collectedHealthy++;
+                mazeScore += 25;
+                updateMazeStatus('Zdrowa energia! +25 pkt 🥦', 'bg-emerald-100 text-emerald-800');
+            } else if (targetCell === 3) {
+                mazeGrid[newY][newX] = 0;
+                mazeScore = Math.max(0, mazeScore - 20);
+                slowPenaltyUntil = Date.now() + 900; // Spowolnienie na 0.9s
+                updateMazeStatus('Pułapka cukru! -20 pkt i zadyszka 🍩', 'bg-rose-100 text-rose-800');
+                setTimeout(drawMaze, 920);
+            } else if (targetCell === 9) {
+                completeMazeLevel();
+            }
+
+            updateMazeHUD();
+            drawMaze();
+        }
+
+        function updateMazeStatus(text, classes) {
+            const badge = document.getElementById('mazeStatusBadge');
+            badge.textContent = text;
+            badge.className = `hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold ${classes}`;
+        }
+
+        function updateMazeHUD() {
+            document.getElementById('mazeLevelDisplay').textContent = `${currentMazeIdx + 1} / ${mazeLevels.length}`;
+            document.getElementById('mazeItemsDisplay').textContent = `${collectedHealthy} / ${totalHealthyInLevel}`;
+            document.getElementById('mazeScoreDisplay').textContent = mazeScore;
+        }
+
+        function completeMazeLevel() {
+            mazeCompleted = true;
+            const bonus = collectedHealthy === totalHealthyInLevel ? 50 : 0;
+            const finalRoundScore = mazeScore + bonus;
+
+            addGlobalPoints(finalRoundScore, `Ukończono Labirynt (Poziom ${currentMazeIdx + 1})!`, `Zebrano ${collectedHealthy}/${totalHealthyInLevel} zdrowych produktów`, '🏃');
+
+            const overlay = document.getElementById('mazeOverlay');
+            document.getElementById('mazeOverlayTitle').textContent = currentMazeIdx < mazeLevels.length - 1 ? 'Poziom ukończony!' : 'Wszystkie labirynty pokonane!';
+            document.getElementById('mazeOverlayDesc').textContent = collectedHealthy === totalHealthyInLevel 
+                ? 'Perfekcyjnie! Zebrałeś wszystkie zdrowe produkty z trasy (+50 pkt bonusu)!' 
+                : `Dotarłeś do mety! Zebrałeś ${collectedHealthy} z ${totalHealthyInLevel} zdrowych skarbów.`;
+            document.getElementById('mazeOverlayPoints').textContent = `+${finalRoundScore} pkt`;
+            
+            const nextBtn = document.getElementById('mazeNextBtn');
+            nextBtn.textContent = currentMazeIdx < mazeLevels.length - 1 ? 'Następny poziom ➡️' : 'Zagraj od nowa 🔄';
+            
+            overlay.classList.remove('hidden');
+        }
+
+        function nextMazeLevel() {
+            const nextIdx = (currentMazeIdx + 1) % mazeLevels.length;
+            initMazeLevel(nextIdx);
+        }
+
+        function resetMazeLevel() {
+            initMazeLevel(currentMazeIdx);
+        }
+
+        // Obsługa klawiatury dla labiryntu
+        window.addEventListener('keydown', (e) => {
+            const mazeSec = document.getElementById('section-maze');
+            if (!mazeSec.classList.contains('active')) return;
+
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                e.preventDefault();
+            }
+
+            switch (e.key) {
+                case 'ArrowUp': case 'w': case 'W': movePlayer(0, -1); break;
+                case 'ArrowDown': case 's': case 'S': movePlayer(0, 1); break;
+                case 'ArrowLeft': case 'a': case 'A': movePlayer(-1, 0); break;
+                case 'ArrowRight': case 'd': case 'D': movePlayer(1, 0); break;
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if (document.getElementById('section-maze').classList.contains('active')) {
+                resizeMazeCanvas();
+            }
+        });
+
+      
+     
+
+        // ==========================================
+        // 5. INICJALIZACJA PO ZAŁADOWANIU STRONY
+        // ==========================================
+        window.onload = function() {
+            selectPyramidTier(0);
+            renderFoodCatalog();
+            renderPlate();
+            initMazeLevel(0);
+            renderQuizQuestion();
+        };
+    </script>
+</body>
+</html>
